@@ -31,7 +31,7 @@ main = do SDL.init [InitVideo, InitAudio]
           enableUnicode True
           ship <- loadSprite "./res/ship.bmp" >>= Prelude.flip scaleSprite 0.7
           bs <- replicateM n (randomBoid 20)
-          let boids = zipWith (\n (Boid _ (p,v)) -> Boid n (p, v)) [0..] bs
+          let boids = zipWith (\n b -> b { boidI = n }) [0..] bs
 --          let boids = [Boid 0 (vector3D (400, 350, 0), 15*xAxis),
 --                       Boid 1 (vector3D (900, 364, 0), (-15)*xAxis)]
           music <- loadMUS "./res/music.mp3"
@@ -45,8 +45,10 @@ randomBoid s = do
   theta <- randomRIO(0, 2*pi)
   let vx = s * cos theta
   let vy = s * sin theta
-  return $ Boid 0 (vector3D (fromIntegral x, fromIntegral y, 0),
-                   vector3D (vx, vy, 0))
+  return $ Boid { boidI = 0,
+                  boidP = vector3D (fromIntegral x, fromIntegral y, 0),
+                  boidV = vector3D (vx, vy, 0),
+                  boidA = NoAction }
          
 forward = vector3D (0,-1,0) :: Vector          
 angle :: Vector -> Vector -> Double
@@ -56,10 +58,12 @@ angle v1 v2 = let x1 = vecX v1
                   y2 = vecY v2
               in atan2 y2 x2 - atan2 y1 x1
                                             
-drawBoid spr screen (Boid _ (p, v)) = 
+drawBoid spr screen b = 
   let posX = floor $ vecX p
       posY = floor $ vecY p
       ang = angle forward (unit v)
+      p = boidP b
+      v = boidV b
   in do
     let format = surfaceGetPixelFormat screen
     drawSprite spr posX posY ((-ang)*180/pi) screen

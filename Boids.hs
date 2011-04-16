@@ -10,49 +10,49 @@ import Debug.Trace
 type Position = Vector3D Double
 type Vector   = Vector3D Double
 
-data Boid' a = Boid Int (Vector3D a, Vector3D a) deriving Show
+data Boid' a = Boid {
+      boidI :: Int,
+      boidP :: Vector3D a,
+      boidV :: Vector3D a,
+      boidA :: BoidAction
+    } deriving Show
+               
+data BoidAction = NoAction
+                | Shooting
+                deriving Show                
+               
 type Boid = Boid' Double
-data Boids = Boids Int [Boid]
 
 instance KdPoint Boid' Double where
-  dim (Boid _ (p, _)) = dim p
-  sub (Boid _ (p, _)) i = sub p i
-  distAxisSq (Boid _ (p1, _)) (Boid _ (p2, _)) i = distAxisSq p1 p2 i
-  distSq (Boid _ (p1, _)) (Boid _ (p2, _)) = distSq p1 p2
+  dim = dim . boidP
+  sub b i = flip sub i $ boidP b
+  distAxisSq b1 b2 i = distAxisSq (boidP b1) (boidP b2) i
+  distSq b1 b2 = distSq (boidP b1) (boidP b2)
   
 newtype BoidRule a = BR { runRule :: KdTree Boid -> Boid -> a }
 
 (->>) (BR r1) (BR r2) = BR (\tree boid -> (r1 tree boid) + (r2 tree boid))
-
---close :: Num a => a       
---close = fromIntegral 80
---tooclose :: Num a => a        
---tooclose = fromIntegral 20
+                        
 maxAccel = 0.2
 maxSpeed = 20
 
-boidV (Boid _ (_, v)) = v
-boidP (Boid _ (p, _)) = p
-boidI (Boid i _) = i
-
-boidAngle (Boid _ (p1, v)) (Boid _ (p2, _)) = 
-  let dp = unit v `zDot` unit (p2 - p1)
-  in acos dp
+boidAngle b1 b2 =
+    let dp = (unit $ boidV b1) `zDot` (unit $ boidP b2 - boidP b1)
+    in acos dp
 
 accelBoid :: Boid -> Vector -> Boid
-accelBoid (Boid id (p, v)) v' =
-    if magv' > 0
-    then
-        clampBoidV maxSpeed . Boid id $ (p, vNew)
-    else
-        Boid id (p, v)
+accelBoid b v' = if magv' > 0
+                 then
+                     clampBoidV maxSpeed $ b { boidV = vNew }
+                 else
+                     b
     where
-      magv = sqrt(zMagSq v)
+      magv = sqrt(zMagSq $ boidV b)
       magv' = sqrt(zMagSq v')
-      vNew = v + scale (maxSpeed*maxAccel) v'
+      vNew = boidV b + scale (maxSpeed*maxAccel) v'
       
 clampBoidV :: Double -> Boid -> Boid
-clampBoidV l (Boid id (p, v))  = Boid id (p, clampVector l v)
+clampBoidV l b  = b { boidV = clampVector l $ boidV b }
 
 clampVector :: Double -> Vector -> Vector
 clampVector val vec = if zMagSq vec > val*val
@@ -60,12 +60,11 @@ clampVector val vec = if zMagSq vec > val*val
                          else vec
                               
 stepBoid :: Double -> Boid -> Boid 
-stepBoid dt (Boid i (p, v)) = Boid i (p + scale dt v,v)
+stepBoid dt b = b { boidP = boidP b + (scale dt $ boidV b) }
 
 moveBoid :: BoidRule Vector -> Double -> KdTree Boid -> Boid -> Boid
-moveBoid br dt allBoids boid@(Boid i (p,v)) = 
-  let acc = runRule br allBoids boid
-  in stepBoid dt $ accelBoid boid acc
+moveBoid br dt allBoids boid = let acc = runRule br allBoids boid
+                               in stepBoid dt $ accelBoid boid acc
      
 cohesion :: Double -> Double -> BoidRule Vector         
 cohesion s close = BR $ f
