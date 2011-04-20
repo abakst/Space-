@@ -18,8 +18,8 @@ data Boid' a = Boid {
     } deriving Show
                
 data BoidAction = NoAction
-                | Shooting
-                deriving Show                
+                | FireAt Int Int -- Target, Cooldown
+                deriving Show             
                
 type Boid = Boid' Double
 
@@ -34,7 +34,7 @@ newtype BoidRule a = BR { runRule :: KdTree Boid -> Boid -> a }
 (->>) (BR r1) (BR r2) = BR (\tree boid -> (r1 tree boid) + (r2 tree boid))
                         
 maxAccel = 0.2
-maxSpeed = 20
+maxSpeed = 25
 
 boidAngle b1 b2 =
     let dp = (unit $ boidV b1) `zDot` (unit $ boidP b2 - boidP b1)
@@ -59,13 +59,12 @@ clampVector val vec = if zMagSq vec > val*val
                          then setMag val vec
                          else vec
                               
-stepBoid :: Double -> Boid -> Boid 
-stepBoid dt b = b { boidP = boidP b + (scale dt $ boidV b) }
-
 moveBoid :: BoidRule Vector -> Double -> KdTree Boid -> Boid -> Boid
-moveBoid br dt allBoids boid = let acc = runRule br allBoids boid
-                               in stepBoid dt $ accelBoid boid acc
-     
+moveBoid br dt allBoids boid =
+    let acc = runRule br allBoids boid
+        moveStep dt b = b { boidP = boidP b + (scale dt $ boidV b) }
+    in moveStep dt $ accelBoid boid acc
+                                  
 cohesion :: Double -> Double -> BoidRule Vector         
 cohesion s close = BR $ f
     where
@@ -95,7 +94,15 @@ separation s tooclose = BR f
         in if length nns == 0
            then origin
            else scale s $ unit $ foldl' (+) origin $ map (df boid) nns
-
+                
+{--
+attack :: Double -> BoidRule BoidAction
+attack range = BR f
+    where
+      f allBoids boid =
+          let nns = filter (target boid) $ kdNNs allBoids boid range
+              target b1 b2 = not (sameBoid b1 b2) && boidAngle b1 b2 < pi/20
+--}
 
 invDiff x1 x2 = 1/sqrt(zMagSq (x1 - x2))           
 invDist p1 p2 = 1/sqrt(zMagSq (p1 - p2))

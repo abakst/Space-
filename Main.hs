@@ -20,9 +20,11 @@ import KdTree
 import Zoepis.ZVector
 import Control.Monad
 
-width = 1024
-height = 768
-n = 25
+width = 800
+height = 600
+n = 5
+ticks = 30
+
 
 main = do SDL.init [InitVideo, InitAudio]
           openAudio 44100 AudioS16Sys 2 4096
@@ -30,13 +32,28 @@ main = do SDL.init [InitVideo, InitAudio]
           setCaption "Test" ""
           enableUnicode True
           ship <- loadSprite "./res/ship.bmp" >>= Prelude.flip scaleSprite 0.7
-          bs <- replicateM n (randomBoid 20)
-          let boids = zipWith (\n b -> b { boidI = n }) [0..] bs
---          let boids = [Boid 0 (vector3D (400, 350, 0), 15*xAxis),
---                       Boid 1 (vector3D (900, 364, 0), (-15)*xAxis)]
           music <- loadMUS "./res/music.mp3"
           playMusic music (-1)
-          loop music boids (display ship)
+          game <- build n setup $ Game {
+                    boids = [],
+                    music = music,
+                    mode = Paused,
+                    sprite = ship
+                  }
+          gameLoop $ game { mode = Running }
+          
+build 0 f a = return a           
+build n f a = do a' <- f a
+                 build (pred n) f a'
+                             
+data Game = Game {                 
+      boids :: [Boid],
+      music :: Music,
+      mode :: GameMode,
+      sprite :: Sprite
+  } 
+            
+data GameMode = Paused | Running | Finished deriving (Eq)
          
 randomBoid :: Double -> IO Boid         
 randomBoid s = do
@@ -77,20 +94,58 @@ display sprite boids = do
   mapM_ (drawBoid sprite screen) boids
   SDL.flip screen
   
-ticks = 30
-loop :: Music -> [Boid] -> ([Boid] -> IO ()) -> IO ()
-loop music boids display = do
+bx = Boids.separation 1 15
+   ->> Boids.cohesion 0.05 100
+   ->> Boids.alignment 0.125 80
+   ->> Boids.stayInBounds 0.5 20 0.0 0.0
+                   (fromIntegral width) (fromIntegral height)
+
+gameLoop :: Game -> IO ()
+gameLoop game = do
   delay ticks
   event <- pollEvent
-  let tree = kdTree boids
+  let tree = kdTree . boids $ game
   case event of
     Quit -> exitWith ExitSuccess
     KeyDown (Keysym _ _ 'q') -> exitWith ExitSuccess
+    KeyDown (Keysym SDLK_RETURN _ _) ->
+        if mode game == Paused
+        then do resumeMusic
+                gameLoop game { mode = Running }
+        else do pauseMusic
+                gameLoop game { mode = Paused }
     _ -> return ()
-  display boids >> loop music (map (moveBoid bx 0.1 tree) boids) display
-
-bx = Boids.separation 0.8 20
-   ->> Boids.cohesion 0.01 80
-   ->> Boids.alignment 0.1 80
-   ->> Boids.stayInBounds 0.5 20 0.0 0.0
-                   (fromIntegral width) (fromIntegral height)
+  display (sprite game) (boids game)
+  case mode game of
+--    Setup -> setup game >>= gameLoop 
+    Paused -> gameLoop game
+    Running ->
+        gameLoop $ game { boids = map (moveBoid bx 0.1 tree) (boids game) }
+    Finished -> gameLoop game
+    
+setup :: Game -> IO Game
+setup game = position >>= direction xAxis >>= addBoid
+    where position = do
+            event <- waitEvent
+            case event of
+              (MouseButtonDown x y _) -> return $ vec x y
+              Quit -> exitWith ExitSuccess
+              _ -> position
+          direction dir pos = do
+            display (sprite game) (newBoid pos dir:boids game)
+            event <- waitEvent
+            case event of
+              (MouseButtonUp x y _) -> return (pos, vec x y - pos)
+              (MouseMotion x y _ _) -> direction (vec x y - pos) pos
+              Quit -> exitWith ExitSuccess
+              _ -> direction dir pos
+          addBoid (pos, dir) = do
+                       let b = newBoid pos dir
+                       return $ game { boids = b:(boids game) }
+          newBoid pos dir = Boid { boidI = length (boids game),
+                                   boidA = NoAction,
+                                   boidP = pos,
+                                   boidV = 15 * unit dir
+                                 }
+          vec x y = vector3D (fromIntegral x, fromIntegral y, 0)
+          
