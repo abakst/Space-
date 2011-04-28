@@ -17,7 +17,7 @@ import System.Random
 import Sprite
 import Boids
 import KdTree
-import Zoepis.ZVector
+import Vector3
 import Control.Monad
 
 width = 800
@@ -42,9 +42,7 @@ main = do SDL.init [InitVideo, InitAudio]
                   }
           gameLoop $ game { mode = Running }
           
-build 0 f a = return a           
-build n f a = do a' <- f a
-                 build (pred n) f a'
+build n f x = foldl (>=>) return (replicate n f) $ x
                              
 data Game = Game {                 
       boids :: [Boid],
@@ -63,11 +61,11 @@ randomBoid s = do
   let vx = s * cos theta
   let vy = s * sin theta
   return $ Boid { boidI = 0,
-                  boidP = vector3D (fromIntegral x, fromIntegral y, 0),
-                  boidV = vector3D (vx, vy, 0),
+                  boidP = vector3 (fromIntegral x) (fromIntegral y) 0,
+                  boidV = vector3 vx vy 0,
                   boidA = NoAction }
          
-forward = vector3D (0,-1,0) :: Vector          
+forward = vector3 0 (-1) 0 :: Vector          
 angle :: Vector -> Vector -> Double
 angle v1 v2 = let x1 = vecX v1
                   x2 = vecX v2
@@ -94,9 +92,9 @@ display sprite boids = do
   mapM_ (drawBoid sprite screen) boids
   SDL.flip screen
   
-bx = Boids.separation 1 15
-   ->> Boids.cohesion 0.05 100
-   ->> Boids.alignment 0.125 80
+bx = Boids.separation 0.7 25
+   ->> Boids.cohesion 0.0 100
+   ->> Boids.alignment 0.1 100
    ->> Boids.stayInBounds 0.5 20 0.0 0.0
                    (fromIntegral width) (fromIntegral height)
 
@@ -147,5 +145,5 @@ setup game = position >>= direction xAxis >>= addBoid
                                    boidP = pos,
                                    boidV = 15 * unit dir
                                  }
-          vec x y = vector3D (fromIntegral x, fromIntegral y, 0)
+          vec x y = vector3 (fromIntegral x) (fromIntegral y) 0
           

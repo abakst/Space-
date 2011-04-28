@@ -1,19 +1,20 @@
 {-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses #-}
 module Boids where
 
-import Zoepis.ZVector
+--import Zoepis.ZVector
+import Vector3
 import KdTree
 import Data.List
 import Control.Arrow
 import Debug.Trace
 
-type Position = Vector3D Double
-type Vector   = Vector3D Double
+type Position = Vector3 Double
+type Vector   = Vector3 Double
 
 data Boid' a = Boid {
       boidI :: Int,
-      boidP :: Vector3D a,
-      boidV :: Vector3D a,
+      boidP :: Vector3 a,
+      boidV :: Vector3 a,
       boidA :: BoidAction
     } deriving Show
                
@@ -33,11 +34,11 @@ newtype BoidRule a = BR { runRule :: KdTree Boid -> Boid -> a }
 
 (->>) (BR r1) (BR r2) = BR (\tree boid -> (r1 tree boid) + (r2 tree boid))
                         
-maxAccel = 0.2
+maxAccel = 0.1
 maxSpeed = 25
 
 boidAngle b1 b2 =
-    let dp = (unit $ boidV b1) `zDot` (unit $ boidP b2 - boidP b1)
+    let dp = (unit $ boidV b1) `dot` (unit $ boidP b2 - boidP b1)
     in acos dp
 
 accelBoid :: Boid -> Vector -> Boid
@@ -47,15 +48,15 @@ accelBoid b v' = if magv' > 0
                  else
                      b
     where
-      magv = sqrt(zMagSq $ boidV b)
-      magv' = sqrt(zMagSq v')
-      vNew = boidV b + scale (maxSpeed*maxAccel) v'
+      magv = mag $ boidV b
+      magv' = mag v'
+      vNew = boidV b + clampVector (maxSpeed*maxAccel) v'
       
 clampBoidV :: Double -> Boid -> Boid
 clampBoidV l b  = b { boidV = clampVector l $ boidV b }
 
 clampVector :: Double -> Vector -> Vector
-clampVector val vec = if zMagSq vec > val*val
+clampVector val vec = if magSq vec > val*val
                          then setMag val vec
                          else vec
                               
@@ -73,7 +74,7 @@ cohesion s close = BR $ f
               (pAv, _ , n) = averageBoids nns
           in if n == 0 
              then origin
-             else scale s $ unit $ pAv - boidP boid
+             else scale s $ {- unit $ -} pAv - boidP boid
              
 alignment :: Double -> Double -> BoidRule Vector                  
 alignment s close = BR f
@@ -83,7 +84,7 @@ alignment s close = BR f
               (_, vAv, n) = averageBoids nns
           in if n == 0 
              then origin
-             else scale s $ unit $ vAv - boidV boid
+             else scale s $ {- unit $ -} vAv - boidV boid
                   
 separation :: Double -> Double -> BoidRule Vector
 separation s tooclose = BR f
@@ -93,7 +94,7 @@ separation s tooclose = BR f
             df b1 b2 = boidP b1 - boidP b2
         in if length nns == 0
            then origin
-           else scale s $ unit $ foldl' (+) origin $ map (df boid) nns
+           else scale s $ {- unit $ -} foldl' (+) origin $ map (df boid) nns
                 
 {--
 attack :: Double -> BoidRule BoidAction
@@ -104,16 +105,16 @@ attack range = BR f
               target b1 b2 = not (sameBoid b1 b2) && boidAngle b1 b2 < pi/20
 --}
 
-invDiff x1 x2 = 1/sqrt(zMagSq (x1 - x2))           
-invDist p1 p2 = 1/sqrt(zMagSq (p1 - p2))
+invDiff x1 x2 = 1/mag (x1 - x2)
+invDist p1 p2 = 1/mag (p1 - p2)
 invVec p1 p2 = scale (invDist p1 p2) (p1 - p2)
            
 stayInBounds :: Double -> Double ->
                Double -> Double -> Double -> Double -> BoidRule Vector
 stayInBounds k close x0 y0 x1 y1 = BR f
     where
-      f allBoids boid = let x = vecX $ boidP boid
-                            y = vecY $ boidP boid
+      f allBoids boid = let (Vector3 x y _ _) = boidP boid
+--                            y = vecY $ boidP boid
                             vx0 = if x < x0 + (close/4)
                                     then xAxis
                                     else origin
@@ -131,11 +132,11 @@ stayInBounds k close x0 y0 x1 y1 = BR f
 averageBoids :: [Boid] -> (Vector, Vector, Int)
 averageBoids bs = 
   let (sumP, sumV) = foldl' (\(p,v) b -> (p + boidP b, v + boidV b))
-                            (vector3D (0,0,0), vector3D (0,0,0))
+                            (vector3 0 0 0, vector3 0 0 0)
                             bs
       n = length bs
   in if n == 0 
-        then (vector3D (0,0,0), vector3D (0,0,0), n)
+        then (vector3 0 0 0, vector3 0 0 0, n)
         else (scale (1.0 / fromIntegral n) sumP,
               scale (1.0 / fromIntegral n) sumV, n)
              

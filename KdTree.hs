@@ -5,7 +5,7 @@ import Data.Function
 import Data.List
 import Data.Ord
 
-import Zoepis.ZVector
+import Vector3
 
 data KdTree a = KdTree Int a (KdTree a) (KdTree a) | Nil
               deriving Show
@@ -16,16 +16,11 @@ class Num a => KdPoint p a where
     distAxisSq :: p a -> p a -> Int -> a
     distSq     :: p a -> p a -> a
     
--- heh, gross...    
-instance KdPoint Vector3D Double where
-    dim p = 3
-    sub p n = case n of
-                0 -> vecX p
-                1 -> vecY p
-                2 -> vecZ p
-                _ -> 0
-    distAxisSq pt1 pt2 i = let d = sub pt1 i - sub pt2 i in d*d
-    distSq pt1 pt2       = zMagSq (pt1 - pt2) 
+instance KdPoint Vector3 Double where    
+  dim p = 3
+  sub (Vector3 x y z _) n = case n of { 0 -> x; 1 -> y; 2 -> z; _ -> 0 }
+  distAxisSq pt1 pt2 i = let d = sub pt1 i - sub pt2 i in d*d
+  distSq pt1 pt2       = magSq (pt1 - pt2)
     
 kdTree :: (KdPoint p a, Ord a) => [p a] -> KdTree (p a)    
 kdTree ps = build 0 ps
